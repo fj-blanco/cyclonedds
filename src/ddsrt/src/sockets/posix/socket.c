@@ -453,6 +453,14 @@ ddsrt_recvmsg(
 {
   ssize_t n;
 
+#if defined(__ZEPHYR__)
+  /* Zephyr scans for a zero-length control header before appending ancillary
+     data.  POSIX defines msg_control as an output buffer, so its initial
+     contents cannot be assumed to contain an empty header. */
+  if (msg->msg_control != NULL && msg->msg_controllen > 0)
+    memset(msg->msg_control, 0, msg->msg_controllen);
+#endif
+
   if ((n = recvmsg(sockext->sock, msg, flags)) != -1) {
     assert(n >= 0);
     *rcvd = (size_t) n;
