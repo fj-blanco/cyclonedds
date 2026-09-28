@@ -17,7 +17,9 @@
 #include "dds/ddsrt/retcode.h"
 #include "dds/ddsrt/attributes.h"
 
-#if DDSRT_WITH_FREERTOS
+#if DDSRT_WITH_ZEPHYR_NATIVE_SYNC
+#include "dds/ddsrt/sync/zephyr.h"
+#elif DDSRT_WITH_FREERTOS
 #include "dds/ddsrt/sync/freertos.h"
 #elif _WIN32
 #include "dds/ddsrt/sync/windows.h"

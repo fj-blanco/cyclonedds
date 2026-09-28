@@ -13,6 +13,7 @@
 
 #cmakedefine DDSRT_WITH_LWIP 1
 #cmakedefine DDSRT_WITH_FREERTOS 1
+#cmakedefine DDSRT_WITH_ZEPHYR_NATIVE_SYNC 1
 
 #cmakedefine DDSRT_HAVE_DYNLIB 1
 #cmakedefine DDSRT_HAVE_FILESYSTEM 1

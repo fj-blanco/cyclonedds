@@ -22,6 +22,10 @@ include(CheckSymbolExists)
 # always be instructed to use an "alternative" stack.
 option(WITH_LWIP "Use lightweight IP stack" OFF)
 option(WITH_FREERTOS "Build for FreeRTOS" OFF)
+option(WITH_ZEPHYR_NATIVE_SYNC "Use native Zephyr DDSRT synchronization (threads remain POSIX)" OFF)
+if(WITH_ZEPHYR_NATIVE_SYNC AND NOT WITH_ZEPHYR)
+  message(FATAL_ERROR "WITH_ZEPHYR_NATIVE_SYNC requires WITH_ZEPHYR")
+endif()
 
 set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
 set(binary_dir "${CMAKE_CURRENT_BINARY_DIR}")
@@ -262,15 +266,20 @@ elseif(WITH_ZEPHYR)
   target_link_libraries(ddsrt INTERFACE Threads::Threads)
 
   list(APPEND headers
-    "${source_dir}/include/dds/ddsrt/sync/posix.h"
     "${source_dir}/include/dds/ddsrt/threads/posix.h"
     "${source_dir}/include/dds/ddsrt/types/posix.h")
+  if(WITH_ZEPHYR_NATIVE_SYNC)
+    list(APPEND headers "${source_dir}/include/dds/ddsrt/sync/zephyr.h")
+    list(APPEND sources "${source_dir}/src/sync/zephyr/sync.c")
+  else()
+    list(APPEND headers "${source_dir}/include/dds/ddsrt/sync/posix.h")
+    list(APPEND sources "${source_dir}/src/sync/posix/sync.c")
+  endif()
   list(APPEND sources
     "${source_dir}/src/environ/zephyr/environ.c"
     "${source_dir}/src/heap/posix/heap.c"
     "${source_dir}/src/process/posix/process.c"
     "${source_dir}/src/random/posix/random.c"
-    "${source_dir}/src/sync/posix/sync.c"
     "${source_dir}/src/threads/posix/threads.c"
     "${source_dir}/src/time/posix/time.c")
 else()
@@ -384,6 +393,7 @@ endif()
 # Generate configuration file
 set(DDSRT_WITH_LWIP ${WITH_LWIP})
 set(DDSRT_WITH_FREERTOS ${WITH_FREERTOS})
+set(DDSRT_WITH_ZEPHYR_NATIVE_SYNC ${WITH_ZEPHYR_NATIVE_SYNC})
 
 foreach(feature TCP_TLS SECURITY LIFESPAN DEADLINE_MISSED NETWORK_PARTITIONS
                 TYPELIB TYPE_DISCOVERY TOPIC_DISCOVERY QOS_PROVIDER TCP FAKEUDP)
