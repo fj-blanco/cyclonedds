@@ -58,10 +58,10 @@ static void netif_callback(struct net_if *iface, void *cb_data)
   ddsrt_ifaddrs_t *ifa;
   struct ifaddrs_data *data = (struct ifaddrs_data*)cb_data;
 
-
   if ((data->rc != DDS_RETCODE_OK)
 #if defined(CONFIG_NET_L2_ETHERNET) && defined(CONFIG_NET_L2_DUMMY)
-    || ((net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) && (net_if_l2(iface) != &NET_L2_GET_NAME(DUMMY)))
+    || ((net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET)) &&
+        (net_if_l2(iface) != &NET_L2_GET_NAME(DUMMY)))
 #elif defined(CONFIG_NET_L2_ETHERNET)
     || (net_if_l2(iface) != &NET_L2_GET_NAME(ETHERNET))
 #elif defined(CONFIG_NET_L2_DUMMY)
@@ -72,105 +72,92 @@ static void netif_callback(struct net_if *iface, void *cb_data)
     return;
   }
 
-  if (data->getv4 && iface->config.ip.ipv4) {
-    struct net_if_ipv4 *cfg = iface->config.ip.ipv4;
-    struct net_if_addr *addr = NULL;
-    int i;
-    for (i = 0; i < NET_IF_MAX_IPV4_ADDR && !addr; i++) {
-      if (cfg->unicast[i].is_used &&
-          cfg->unicast[i].addr_state == NET_ADDR_PREFERRED &&
-          cfg->unicast[i].address.family == AF_INET) {
-        addr = &cfg->unicast[i];
-      }
-    }
+  if (data->getv4) {
+    const struct net_in_addr *addr =
+      net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
 
-    ifa = ddsrt_calloc_s(1, sizeof(ddsrt_ifaddrs_t));
-    if (!ifa) {
-      data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
-    } else {
-      ifa->name = ddsrt_strdup(iface->if_dev->dev->name);
-      if (addr) {
-        ifa->addr = ddsrt_calloc_s(1, sizeof(struct sockaddr_in));
-        ifa->netmask = ddsrt_calloc_s(1, sizeof(struct sockaddr_in));
-        ifa->broadaddr = ddsrt_calloc_s(1, sizeof(struct sockaddr_in));
-      }
-      if (!ifa->name || (addr && (!ifa->addr || !ifa->netmask || !ifa->broadaddr))) {
+    if (addr != NULL) {
+      ifa = ddsrt_calloc_s(1, sizeof(ddsrt_ifaddrs_t));
+      if (!ifa) {
         data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
       } else {
-        ifa->type = DDSRT_IFTYPE_UNKNOWN;
-        ifa->flags = getflags(iface);
-        ifa->index = net_if_get_by_iface(iface);
+        ifa->name = ddsrt_strdup(net_if_get_device(iface)->name);
+        ifa->addr = ddsrt_calloc_s(1, sizeof(*ifa->addr));
+        ifa->netmask = ddsrt_calloc_s(1, sizeof(*ifa->netmask));
+        ifa->broadaddr = ddsrt_calloc_s(1, sizeof(*ifa->broadaddr));
 
-        if (addr) {
-          net_ipaddr_copy(&(net_sin(ifa->addr)->sin_addr), &(addr->address.in_addr));
+        if (!ifa->name || !ifa->addr || !ifa->netmask || !ifa->broadaddr) {
+          data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
+        } else {
+          ifa->type = DDSRT_IFTYPE_UNKNOWN;
+          ifa->flags = getflags(iface);
+          ifa->index = net_if_get_by_iface(iface);
+
+          net_ipaddr_copy(&(net_sin(ifa->addr)->sin_addr), addr);
           ifa->addr->sa_family = AF_INET;
 
-          net_ipaddr_copy(&(net_sin(ifa->netmask)->sin_addr), &(cfg->netmask));
+          const struct net_in_addr netmask =
+            net_if_ipv4_get_netmask_by_addr(iface, addr);
+          net_ipaddr_copy(&(net_sin(ifa->netmask)->sin_addr), &netmask);
           ifa->netmask->sa_family = AF_INET;
 
-          ((struct sockaddr_in*)ifa->broadaddr)->sin_addr.s_addr = (net_sin(ifa->addr)->sin_addr.s_addr & net_sin(ifa->netmask)->sin_addr.s_addr) | ~net_sin(ifa->netmask)->sin_addr.s_addr;
+          ((struct sockaddr_in*)ifa->broadaddr)->sin_addr.s_addr =
+            (net_sin(ifa->addr)->sin_addr.s_addr &
+             net_sin(ifa->netmask)->sin_addr.s_addr) |
+            ~net_sin(ifa->netmask)->sin_addr.s_addr;
           ifa->broadaddr->sa_family = AF_INET;
         }
       }
-    }
 
-    if (data->rc == DDS_RETCODE_OK) {
-      if (data->prev) {
-        data->prev->next = ifa;
+      if (data->rc == DDS_RETCODE_OK) {
+        if (data->prev) {
+          data->prev->next = ifa;
+        } else {
+          data->first = ifa;
+        }
+        data->prev = ifa;
       } else {
-        data->first = ifa;
+        ddsrt_freeifaddrs(ifa);
       }
-      data->prev = ifa;
-    } else {
-      ddsrt_freeifaddrs(ifa);
     }
   }
 
 #if DDSRT_HAVE_IPV6
-  if (data->getv6 && iface->config.ip.ipv6) {
-    struct net_if_ipv6 *cfg = iface->config.ip.ipv6;
-    struct net_if_addr *addr = NULL;
-    int i;
-    for (i = 0; i < NET_IF_MAX_IPV6_ADDR; i++) {
-      if (cfg->unicast[i].is_used &&
-          cfg->unicast[i].addr_state == NET_ADDR_PREFERRED &&
-          cfg->unicast[i].address.family == AF_INET6 &&
-          !net_ipv6_is_ll_addr(&cfg->unicast[i].address.in6_addr)) {
-        addr = &cfg->unicast[i];
-      }
-    }
+  if (data->getv6) {
+    struct net_if *address_iface = iface;
+    const struct net_in6_addr *addr =
+      net_if_ipv6_get_global_addr(NET_ADDR_PREFERRED, &address_iface);
 
-    ifa = ddsrt_calloc_s(1, sizeof(ddsrt_ifaddrs_t));
-    if (!ifa) {
-      data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
-    } else {
-      ifa->name = ddsrt_strdup(iface->if_dev->dev->name);
-      if (addr) {
-        ifa->addr = ddsrt_calloc_s(1, sizeof(struct sockaddr_in6));
-      }
-      if (!ifa->name || (addr && (!ifa->addr))) {
+    if (addr != NULL) {
+      ifa = ddsrt_calloc_s(1, sizeof(ddsrt_ifaddrs_t));
+      if (!ifa) {
         data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
       } else {
-        ifa->type = DDSRT_IFTYPE_UNKNOWN;
-        ifa->flags = getflags(iface);
-        ifa->index = net_if_get_by_iface(iface);
+        ifa->name = ddsrt_strdup(net_if_get_device(iface)->name);
+        ifa->addr = ddsrt_calloc_s(1, sizeof(*ifa->addr));
 
-        if (addr) {
-          net_ipaddr_copy(&(net_sin6(ifa->addr)->sin6_addr), &(addr->address.in6_addr));
+        if (!ifa->name || !ifa->addr) {
+          data->rc = DDS_RETCODE_OUT_OF_RESOURCES;
+        } else {
+          ifa->type = DDSRT_IFTYPE_UNKNOWN;
+          ifa->flags = getflags(iface);
+          ifa->index = net_if_get_by_iface(iface);
+
+          net_ipaddr_copy(&(net_sin6(ifa->addr)->sin6_addr), addr);
           ifa->addr->sa_family = AF_INET6;
         }
       }
-    }
 
-    if (data->rc == DDS_RETCODE_OK) {
-      if (data->prev) {
-        data->prev->next = ifa;
+      if (data->rc == DDS_RETCODE_OK) {
+        if (data->prev) {
+          data->prev->next = ifa;
+        } else {
+          data->first = ifa;
+        }
+        data->prev = ifa;
       } else {
-        data->first = ifa;
+        ddsrt_freeifaddrs(ifa);
       }
-      data->prev = ifa;
-    } else {
-      ddsrt_freeifaddrs(ifa);
     }
   }
 #endif

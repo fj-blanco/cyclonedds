@@ -450,13 +450,13 @@ ddsrt_recv(
   return recv_error_to_retcode(errno);
 }
 
-#if (LWIP_SOCKET && !defined(recvmsg)) || defined(__ZEPHYR__)
-static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
+#if defined(__ZEPHYR__) || (LWIP_SOCKET && !defined(recvmsg))
+static ssize_t recvmsg_fallback(int sockfd, struct msghdr *msg, int flags)
 {
   assert(msg->msg_iovlen == 1);
-  assert(msg->msg_controllen == 0);
 
   msg->msg_flags = 0;
+  msg->msg_controllen = 0;
 
   return recvfrom(
     sockfd,
@@ -466,7 +466,7 @@ static ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags)
     msg->msg_name,
    &msg->msg_namelen);
 }
-#endif /* LWIP_SOCKET */
+#endif /* __ZEPHYR__ || (LWIP_SOCKET && !defined(recvmsg)) */
 
 dds_return_t
 ddsrt_recvmsg(
@@ -477,7 +477,12 @@ ddsrt_recvmsg(
 {
   ssize_t n;
 
-  if ((n = recvmsg(sockext->sock, msg, flags)) != -1) {
+#if defined(__ZEPHYR__) || (LWIP_SOCKET && !defined(recvmsg))
+  n = recvmsg_fallback(sockext->sock, msg, flags);
+#else
+  n = recvmsg(sockext->sock, msg, flags);
+#endif
+  if (n != -1) {
     assert(n >= 0);
     *rcvd = (size_t) n;
     return DDS_RETCODE_OK;

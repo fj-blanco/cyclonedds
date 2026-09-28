@@ -36,9 +36,9 @@ ddsrt_getenv(const char *name, const char **value)
   if (!isenvvar(name))
     return DDS_RETCODE_BAD_PARAMETER;
   
-  /* poor mans getenv, good enough for CYCLONEDDS_URI */
+  /* Zephyr may leave environ NULL when no environment was provided. */
   name_len = strlen(name);
-  for (ep = environ; *ep != NULL; ep++)
+  for (ep = environ; ep != NULL && *ep != NULL; ep++)
   {
     if (!strncmp(*ep, name, name_len) && (*ep)[name_len] == '=') {
       *value = *ep + name_len + 1;

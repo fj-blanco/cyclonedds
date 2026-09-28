@@ -176,7 +176,11 @@ static dds_return_t ddsi_udp_conn_read (struct ddsi_tran_conn * conn_cmn, unsign
     struct in6_pktinfo ip6;
 #endif
   };
-  char incmsg[CMSG_SPACE (sizeof (union in_pktinfo_4_6))];
+  /* Zephyr's recvmsg implementation treats zero-length control headers as
+     unused slots while constructing the result.  POSIX does not require the
+     caller to initialise this output buffer, so make that Zephyr-specific
+     expectation explicit here. */
+  char incmsg[CMSG_SPACE (sizeof (union in_pktinfo_4_6))] = { 0 };
 #endif // PACKET_DESTINATION_INFO
   ddsrt_iovec_t msg_iov = {
     .iov_base = (void *) buf,

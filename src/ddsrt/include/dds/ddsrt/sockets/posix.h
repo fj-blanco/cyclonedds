@@ -56,13 +56,23 @@ typedef struct ddsrt_socket_ext {
    for the same group will be skipped */
 #define DDSRT_MCGROUP_JOIN_ONCE 1
 
-# define INADDR_LOOPBACK 0x7f000001 /* 127.0.0.1 */
-# define IN_MULTICAST(a) ((((long int) (a)) & 0xf0000000) == 0xe0000000)
+# ifndef INADDR_LOOPBACK
+#   define INADDR_LOOPBACK 0x7f000001 /* 127.0.0.1 */
+# endif
+# ifndef IN_MULTICAST
+#   define IN_MULTICAST(a) ((((long int) (a)) & 0xf0000000) == 0xe0000000)
+# endif
 
 /* Ignored socket options */
-# define IP_MULTICAST_IF    32
-# define IP_MULTICAST_TTL   33
-# define IP_MULTICAST_LOOP  34
+# ifndef IP_MULTICAST_IF
+#   define IP_MULTICAST_IF    32
+# endif
+# ifndef IP_MULTICAST_TTL
+#   define IP_MULTICAST_TTL   33
+# endif
+# ifndef IP_MULTICAST_LOOP
+#   define IP_MULTICAST_LOOP  34
+# endif
 
 /* for ddsrt_getifaddrs */
 # define IFF_UP              0x1

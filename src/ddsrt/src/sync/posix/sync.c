@@ -175,6 +175,13 @@ static bool ddsrt_cond_waituntil_impl (pthread_cond_t *cond, pthread_mutex_t *mu
     case 0:
       return true;
     case ETIMEDOUT:
+#if defined(__ZEPHYR__) && defined(CYCLONEDDS_ZEPHYR_CONDVAR_TIMEOUT_RELOCK)
+      /* Zephyr v4.4.0's k_condvar_wait() leaves the mutex unlocked on a
+         timeout (fixed upstream by Zephyr commit 5c6c6837cc4).  POSIX
+         requires pthread_cond_timedwait() to return with it locked. */
+      if (pthread_mutex_lock (mutex) != 0)
+        abort ();
+#endif
       return false;
     default:
       break;
